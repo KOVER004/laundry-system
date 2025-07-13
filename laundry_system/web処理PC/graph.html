@@ -1,0 +1,86 @@
+<!--PC1に保存させる-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>乾燥履歴グラフ</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .chart-container { max-width: 900px; margin: auto; }
+        .nav-link { margin-top: 20px; text-align: center; }
+        .nav-link a { text-decoration: none; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <h1>乾燥履歴グラフ</h1>
+        <canvas id="dryingChart"></canvas>
+    </div>
+    <div class="nav-link">
+        <a href="http://localhost:5001/">操作画面に戻る</a>
+    </div>
+
+    <script>
+        window.onload = async function() {
+            try {
+                // このHTMLはgraph.pyから提供されるため、相対パスでOK
+                const response = await fetch('/graph_data');
+                const data = await response.json();
+                
+                const ctx = document.getElementById('dryingChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [
+                            {
+                                label: '乾燥率 (%)',
+                                data: data.dry_rate_data,
+                                borderColor: 'rgb(75, 192, 192)',
+                                yAxisID: 'y_rate',
+                                tension: 0.1
+                            },
+                            {
+                                label: '温度 (°C)',
+                                data: data.temperature_data,
+                                borderColor: 'rgb(255, 99, 132)',
+                                yAxisID: 'y_env',
+                                tension: 0.1,
+                                hidden: true
+                            },
+                            {
+                                label: '湿度 (%)',
+                                data: data.humidity_data,
+                                borderColor: 'rgb(54, 162, 235)',
+                                yAxisID: 'y_env',
+                                tension: 0.1,
+                                hidden: true
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            y_rate: {
+                                type: 'linear',
+                                position: 'left',
+                                title: { display: true, text: '乾燥率 (%)' },
+                                min: 0,
+                                max: 110
+                            },
+                            y_env: {
+                                type: 'linear',
+                                position: 'right',
+                                title: { display: true, text: '温度(°C) / 湿度(%)' },
+                                grid: { drawOnChartArea: false }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('グラフデータの読み込みに失敗:', error);
+            }
+        };
+    </script>
+</body>
+</html>

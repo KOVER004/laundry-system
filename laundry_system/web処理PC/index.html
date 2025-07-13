@@ -1,0 +1,122 @@
+<!--PC1に保存させる-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>衣類乾燥モニター</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; }
+        .status-box { border: 1px solid #ccc; padding: 15px; margin-top: 20px; border-radius: 8px; }
+        .status-item { margin-bottom: 10px; font-size: 1.2em; }
+        .status-item span { font-weight: bold; color: #0056b3; }
+        button { font-size: 1em; padding: 10px 15px; cursor: pointer; }
+        select { font-size: 1em; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>衣類乾燥モニター</h1>
+
+    <div>
+        <label for="garmentSelect">衣類の種類:</label>
+        <select id="garmentSelect">
+            <option value="">読み込み中...</option>
+        </select>
+        <button onclick="startDrying()">測定開始</button>
+    </div>
+
+    <div class="status-box">
+        <h2>現在の状況</h2>
+        <div class="status-item">乾燥率: <span id="dryRate">- %</span></div>
+        <div class="status-item">温度: <span id="temperature">- ℃</span></div>
+        <div class="status-item">湿度: <span id="humidity">- %</span></div>
+        <div class="status-item">予測完了時刻: <span id="estimatedTime">-</span></div>
+    </div>
+
+    <script>
+        let statusInterval;
+
+        // ページ読み込み時に衣類リストを取得
+        window.onload = async function() {
+            try {
+                const response = await fetch('/garments');
+                const garments = await response.json();
+                const select = document.getElementById('garmentSelect');
+                select.innerHTML = '<option value="">-- 衣類を選択 --</option>';
+                garments.forEach(g => {
+                    const option = document.createElement('option');
+                    option.value = g.id;
+                    option.textContent = g.name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('衣類リストの読み込みに失敗:', error);
+                document.getElementById('garmentSelect').innerHTML = '<option value="">読み込み失敗</option>';
+            }
+        };
+
+        // 「測定開始」ボタンが押されたときの処理
+        async function startDrying() {
+            const garmentId = document.getElementById('garmentSelect').value;
+            if (!garmentId) {
+                alert('衣類を選択してください。');
+                return;
+            }
+
+            try {
+                await fetch('/start_drying', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ garment_id: parseInt(garmentId) })
+                });
+                alert('測定開始の指令を送信しました。');
+                // 10秒ごとにステータス更新を開始
+                if (statusInterval) clearInterval(statusInterval);
+                statusInterval = setInterval(updateStatus, 10000);
+                updateStatus(); // すぐに一度実行
+            } catch (error) {
+                console.error('測定開始に失敗:', error);
+                alert('測定開始の指令に失敗しました。');
+            }
+        }
+
+        // ステータスを更新する処理
+        async function updateStatus() {
+            try {
+                const response = await fetch('/latest_status');
+                if (!response.ok) return;
+
+                const data = await response.json();
+                document.getElementById('dryRate').textContent = data.dry_rate ? data.dry_rate.toFixed(1) + ' %' : '-';
+                document.getElementById('temperature').textContent = data.temperature ? data.temperature.toFixed(1) + ' ℃' : '-';
+                document.getElementById('humidity').textContent = data.humidity ? data.humidity.toFixed(1) + ' %' : '-';
+
+                if (data.predicted_hours !== null) {
+                    const finishTime = new Date(new Date(data.timestamp).getTime() + (data.predicted_hours * 3600 + data.predicted_minutes * 60) * 1000);
+                    const timeString = finishTime.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+                    document.getElementById('estimatedTime').textContent = `${timeString} ごろ`;
+                    
+                    // Slackに通知
+                    notifySlack(`現在の予測乾燥完了時刻は ${timeString} ごろです！`);
+                } else {
+                    document.getElementById('estimatedTime').textContent = '-';
+                }
+            } catch (error) {
+                console.error('ステータス更新エラー:', error);
+            }
+        }
+
+        // Slackに通知する関数
+        async function notifySlack(message) {
+            try {
+                await fetch('/notify_slack', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+            } catch (error) {
+                console.error('Slack通知に失敗:', error);
+            }
+        }
+    </script>
+</body>
+</html>
